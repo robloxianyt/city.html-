@@ -1,0 +1,640 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Mini City — Top-down City Builder with Pixel Art Tiles</title>
+  <style>
+    :root {
+      --bg: #0f1724;
+      --panel: #091023;
+      --accent: #6ee7b7;
+      --muted: #9aa8bf;
+    }
+    html, body {
+      height: 100%;
+      margin: 0;
+      font-family: Inter, system-ui, Segoe UI, Roboto, Arial;
+      background: linear-gradient(180deg,#071022 0%, #06162b 60%);
+      color: #e6eef8;
+      display: flex;
+    }
+    .app {
+      display: flex;
+      width: 100%;
+      height: 100vh;
+      gap: 12px;
+      padding: 12px;
+      box-sizing: border-box;
+    }
+    .left {
+      width: 78%;
+      background: rgba(255,255,255,0.02);
+      border-radius: 12px;
+      padding: 12px;
+      box-shadow: 0 6px 30px rgba(2,6,23,.5);
+      display: flex;
+      flex-direction: column;
+    }
+    .right {
+      width: 300px;
+      min-width: 260px;
+      background: var(--panel);
+      border-radius: 12px;
+      padding: 14px;
+      box-shadow: 0 6px 24px rgba(2,6,23,.6);
+      overflow-y: auto;
+    }
+    canvas {
+      background: linear-gradient(180deg,#0b2740,#0b2136);
+      border-radius: 8px;
+      flex: 1;
+      display: block;
+      margin: auto;
+      image-rendering: pixelated;
+    }
+    h1 {
+      font-size: 16px;
+      margin: 0 0 8px 0;
+    }
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    button {
+      background: #0b1726;
+      border: 1px solid rgba(255,255,255,0.04);
+      padding: 8px;
+      border-radius: 8px;
+      color: inherit;
+      cursor: pointer;
+      user-select: none;
+    }
+    .tool {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 8px;
+      flex-wrap: wrap;
+    }
+    .tile-btn button {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 72px;
+      justify-content: center;
+    }
+    .status {
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 8px;
+    }
+    label {
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    input[type=range] {
+      width: 100%;
+    }
+    select, input[type=checkbox] {
+      cursor: pointer;
+    }
+    .small {
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .map-list {
+      max-height: 140px;
+      overflow: auto;
+      margin: 8px 0;
+      padding-right: 6px;
+    }
+    .footer {
+      margin-top: 12px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .big-number {
+      font-weight: 700;
+      color: var(--accent);
+    }
+    .warning {
+      color: #ffb4b4;
+    }
+    .tile-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .legend-item {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      padding: 6px;
+      border-radius: 6px;
+      background: rgba(255,255,255,0.02);
+    }
+    .legend-color {
+      width: 16px;
+      height: 16px;
+      image-rendering: pixelated;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="left">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap: wrap;">
+        <h1>Mini City — top-down builder</h1>
+        <div class="small">Place tiles, toggle options, save/load, try rare disasters</div>
+      </div>
+      <canvas id="game" width="960" height="640"></canvas>
+      <div class="status">Zoom: <span id="zoomLabel">1x</span> • Turn/day: <span id="tickLabel">0</span></div>
+    </div>
+
+    <div class="right">
+      <h2 style="margin:0 0 6px 0">Tools & Options</h2>
+      <div class="tool tile-btn">
+        <label class="small">Tile (click canvas to place)</label>
+        <button class="place" data-tile="0" title="Empty">Empty</button>
+        <button class="place" data-tile="1" title="Road">Road</button>
+        <button class="place" data-tile="2" title="Residential">Res</button>
+        <button class="place" data-tile="3" title="Commercial">Com</button>
+        <button class="place" data-tile="4" title="Industrial">Ind</button>
+        <button class="place" data-tile="5" title="Park">Park</button>
+        <button class="place" data-tile="6" title="Power">Power</button>
+        <button class="place" data-tile="7" title="Police">Police</button>
+      </div>
+
+      <div class="controls">
+        <div>
+          <label class="small">Budget</label>
+          <div><span class="big-number" id="money">$1000</span></div>
+        </div>
+        <div>
+          <label class="small">Population</label>
+          <div><span id="pop">0</span></div>
+        </div>
+
+        <div>
+          <label><input type="checkbox" id="infiniteMoney"> Infinite money</label>
+        </div>
+        <div>
+          <label><input type="checkbox" id="noAbandon"> No abandoned houses</label>
+        </div>
+      </div>
+
+      <div>
+        <label class="small">Maps</label>
+        <div style="display:flex;gap:8px;margin-top:6px">
+          <select id="mapSelect"></select>
+          <button id="loadMap">Load</button>
+        </div>
+        <div class="map-list" id="mapList"></div>
+        <div style="display:flex;gap:6px;margin-top:6px">
+          <button id="newMap">New</button>
+          <button id="openBuilder">Map Builder</button>
+        </div>
+      </div>
+
+      <div style="margin-top:8px">
+        <label class="small">Save / Load City</label>
+        <div style="display:flex;gap:6px;margin-top:6px">
+          <input id="saveName" placeholder="save name" style="flex:1;padding:6px;border-radius:6px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit" />
+          <button id="saveBtn">Save</button>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:6px">
+          <select id="saveList"></select>
+          <button id="loadBtn">Load</button>
+          <button id="delSave">Delete</button>
+        </div>
+      </div>
+
+      <div style="margin-top:10px">
+        <label class="small">Game Speed</label>
+        <input type="range" id="speed" min="0" max="5" value="1" />
+        <div class="row" style="margin-top:6px">
+          <button id="playPause">Pause</button>
+          <button id="step">Step</button>
+          <button id="reset">Reset</button>
+        </div>
+      </div>
+
+      <div style="margin-top:10px">
+        <label class="small">Natural Disasters (rare)</label>
+        <div class="row" style="margin-top:6px">
+          <button id="triggerMeteor">Meteor</button>
+          <button id="triggerQuake">Earthquake</button>
+          <button id="triggerFlood">Flood</button>
+        </div>
+        <div class="small" style="margin-top:6px">Disasters are rare and destructive — toggle \`No Abandoned Houses\` to prevent abandonment effects.</div>
+      </div>
+
+      <div class="tile-legend">
+        <div class="legend-item"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAQAAAC1+jfqAAAAJUlEQVR4AWMYQACM9P///wSExMSKGowQKCgrEwFKEEGnBwcHDw0PJBgAAJoMCA0PhV7ZAAAAAElFTkSuQmCC" class="legend-color" alt="Empty"> <div class="small">Empty</div></div>
+        <div class="legend-item"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAQAAAC1+jfqAAAAIklEQVR4AWMYwYGhgIj+f38GDMxAfS5A6coM8cgEwi4ygA3qADHXmWJgAAAABJRU5ErkJggg==" class="legend-color" alt="Road"> <div class="small">Road</div></div>
+        <div class="legend-item"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAQAAAC1+jfqAAAALUlEQVR4AWMYpGRkYIwMkECgWlZ2dgAqM2D4YohmCgAABKEIKYQhhAsg8kCgaEsAAAKzMC6iJcqbcAAAAASUVORK5CYII=" class="legend-color" alt="Residential"> <div class="small">Residential</div></div>
+        <div class="legend-item"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAQAAAC1+jfqAAAALElEQVR4AWMYwYGhgIj+f38GAyZgF6MgFCh8GAEBYxAB6yiDYAEGAGizCiYG8H8HgAAAABJRU5ErkJggg==" class="legend-color" alt="Commercial"> <div class="small">Commercial</div></div>
+        <div class="legend-item"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAQAAAC1+jfqAAAANklEQVR4AWMYzMxjQZHR4eGhAOBRR8XvDwMB6QQC4HIHGLABAoPI1WAj3jQ6AiNQAEAUpc1VwcFDMMAAAAASUVORK5CYII=" class="legend-color" alt="Industrial"> <div class="small">Industrial</div></div>
+        <div class="legend-item"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAQAAAC1+jfqAAAAMUlEQVR4AWMYcyMjGYAQiBQCjARIGggEGggFSEYMDAwA1JMFVsgcSqQcgQAaWwORwCT7x8AAAAASUVORK5CYII=", class="legend-color" alt="Park"> <div class="small">Park</div></div>
+        <div class="legend-item"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAQAAAC1+jfqAAAAOklEQVR4AWMYwOHLhwcDG4QAYoxI+v1sL9z6BGOI4YcDAQKoVBF6jxkBQTAhS7Aq4cBAK3QGpPxYYwwOAAAAAElFTkSuQmCC", class="legend-color" alt="Power"> <div class="small">Power</div></div>
+        <div class="legend-item"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAQAAAC1+jfqAAAALElEQVR4AWMYiBgIGBgYkHxOQmLsbGBgYUoWjoDgm/UEFjUBHJMMDwAAAJ9MDV1RWXbcAAAAASUVORK5CYII=", class="legend-color" alt="Police"> <div class="small">Police</div></div>
+      </div>
+
+      <div class="footer">Built-in save uses browser localStorage. Maps and cities persist.</div>
+    </div>
+  </div>
+
+<script>
+(function(){
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+
+  const cols = 48, rows = 32;
+  const tileSize = 20;
+
+  // Tiles:
+  // 0: empty, 1: road, 2: residential, 3: commercial, 4: industrial, 5: park, 6: power, 7: police
+  const tileCosts = [0, 1, 20, 40, 40, 10, 100, 200];
+  const tileNames = ['Empty','Road','Residential','Commercial','Industrial','Park','Power','Police'];
+
+  // Base64 pixel art tiles 16x16 from earlier — small squares with colors
+  const tileImgsSrc = {
+    0: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAQAAAC1+jfqAAAAJUlEQVR4AWMYQACM9P///wSExMSKGowQKCgrEwFKEEGnBwcHDw0PJBgAAJoMCA0PhV7ZAAAAAElFTkSuQmCC", // empty
+    1: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAQAAAC1+jfqAAAAIklEQVR4AWMYwYGhgIj+f38GDMxAfS5A6coM8cgEwi4ygA3qADHXmWJgAAAABJRU5ErkJggg==", // road
+    2: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAQAAAC1+jfqAAAALUlEQVR4AWMYpGRkYIwMkECgWlZ2dgAqM2D4YohmCgAABKEIKYQhhAsg8kCgaEsAAAKzMC6iJcqbcAAAAASUVORK5CYII=", // residential
+    3: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAQAAAC1+jfqAAAALElEQVR4AWMYwYGhgIj+f38GAyZgF6MgFCh8GAEBYxAB6yiDYAEGAGizCiYG8H8HgAAAABJRU5ErkJggg==", // commercial
+    4: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAQAAAC1+jfqAAAANklEQVR4AWMYzMxjQZHR4eGhAOBRR8XvDwMB6QQC4HIHGLABAoPI1WAj3jQ6AiNQAEAUpc1VwcFDMMAAAAASUVORK5CYII=", // industrial
+    5: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAQAAAC1+jfqAAAAMUlEQVR4AWMYcyMjGYAQiBQCjARIGggEGggFSEYMDAwA1JMFVsgcSqQcgQAaWwORwCT7x8AAAAASUVORK5CYII=", // park
+    6: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAQAAAC1+jfqAAAAOklEQVR4AWMYwOHLhwcDG4QAYoxI+v1sL9z6BGOI4YcDAQKoVBF6jxkBQTAhS7Aq4cBAK3QGpPxYYwwOAAAAAElFTkSuQmCC", // power
+    7: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAQAAAC1+jfqAAAALElEQVR4AWMYiBgIGBgYkHxOQmLsbGBgYUoWjoDgm/UEFjUBHJMMDwAAAJ9MDV1RWXbcAAAAASUVORK5CYII=" // police
+  };
+  const tileImages = {};
+
+  // Load tile images for drawing
+  for(let t in tileImgsSrc){
+    const img = new Image();
+    img.src = tileImgsSrc[t];
+    tileImages[t] = img;
+  }
+
+  let map = new Array(cols * rows).fill(0);
+  let money = 1000;
+  let population = 0;
+  let tick = 0;
+  let playing = true;
+  let speed = 1;
+  let infiniteMoney = false;
+  let noAbandon = false;
+
+  let currentTile = 1; // default to road
+
+  // Helpers to get x,y from index and vice versa
+  function getIndex(x,y){return y*cols+x;}
+  function getXY(i){return [i%cols, Math.floor(i/cols)];}
+
+  // Draw the grid map
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+
+    for(let y=0; y<rows; y++){
+      for(let x=0; x<cols; x++){
+        let i = getIndex(x,y);
+        let tile = map[i];
+        let img = tileImages[tile];
+        if(img.complete){
+          ctx.drawImage(img, x*tileSize, y*tileSize, tileSize, tileSize);
+        } else {
+          // fallback fill
+          ctx.fillStyle = ['#101820','#7f8c8d','#1abc9c','#3498db','#e67e22','#2ecc71','#f1c40f','#9b59b6'][tile];
+          ctx.fillRect(x*tileSize,y*tileSize,tileSize,tileSize);
+        }
+      }
+    }
+    // grid lines
+    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+    for(let x=0;x<=cols;x++){
+      ctx.beginPath();
+      ctx.moveTo(x*tileSize,0);
+      ctx.lineTo(x*tileSize,rows*tileSize);
+      ctx.stroke();
+    }
+    for(let y=0;y<=rows;y++){
+      ctx.beginPath();
+      ctx.moveTo(0,y*tileSize);
+      ctx.lineTo(cols*tileSize,y*tileSize);
+      ctx.stroke();
+    }
+  }
+
+  // Calculate population and money updates
+  function update(){
+    tick++;
+    // Simulate population changes
+    population = 0;
+    for(let i=0;i<map.length;i++){
+      const tile = map[i];
+      if(tile===2){ // residential
+        population += 5;
+      }
+      if(tile===3){ // commercial
+        population += 3;
+      }
+      if(tile===4){ // industrial
+        population += 2;
+      }
+    }
+    // Simulate money income based on commercial and industrial
+    let income = 0;
+    for(let i=0;i<map.length;i++){
+      const tile = map[i];
+      if(tile===3) income += 2;
+      if(tile===4) income += 3;
+    }
+    if(!infiniteMoney){
+      money += income - 1; // base expense 1 per tick
+      if(money<0) money=0;
+    }
+
+    // Abandonment (simplified)
+    if(!noAbandon){
+      for(let i=0;i<map.length;i++){
+        if(map[i]===2 && money<10){
+          // abandoned residential turns to empty 10% chance
+          if(Math.random()<0.1) map[i]=0;
+        }
+      }
+    }
+  }
+
+  // Event handlers for canvas clicks to place tiles
+  canvas.addEventListener('click', e=>{
+    const rect = canvas.getBoundingClientRect();
+    const x = Math.floor((e.clientX - rect.left)/tileSize);
+    const y = Math.floor((e.clientY - rect.top)/tileSize);
+    if(x<0||x>=cols||y<0||y>=rows) return;
+    const idx = getIndex(x,y);
+
+    const cost = tileCosts[currentTile];
+    if(infiniteMoney || money >= cost){
+      map[idx] = currentTile;
+      if(!infiniteMoney) money -= cost;
+      draw();
+      updateStatus();
+    } else {
+      alert('Not enough money to build '+tileNames[currentTile]);
+    }
+  });
+
+  // Setup UI buttons
+  const tileButtons = document.querySelectorAll('.place');
+  tileButtons.forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      currentTile = +btn.getAttribute('data-tile');
+      tileButtons.forEach(b=>b.style.border='');
+      btn.style.border = '2px solid var(--accent)';
+    });
+  });
+  tileButtons[1].style.border = '2px solid var(--accent)'; // default highlight road
+
+  // Infinite money toggle
+  const infMoneyCheckbox = document.getElementById('infiniteMoney');
+  infMoneyCheckbox.addEventListener('change', e=>{
+    infiniteMoney = e.target.checked;
+    if(infiniteMoney) money = 999999;
+    updateStatus();
+  });
+
+  // No abandon toggle
+  const noAbandonCheckbox = document.getElementById('noAbandon');
+  noAbandonCheckbox.addEventListener('change', e=>{
+    noAbandon = e.target.checked;
+  });
+
+  // Update status panel
+  function updateStatus(){
+    document.getElementById('money').textContent = '$'+money;
+    document.getElementById('pop').textContent = population;
+    document.getElementById('tickLabel').textContent = tick;
+  }
+
+  // Save/load city using localStorage
+  const saveNameInput = document.getElementById('saveName');
+  const saveBtn = document.getElementById('saveBtn');
+  const loadBtn = document.getElementById('loadBtn');
+  const delSaveBtn = document.getElementById('delSave');
+  const saveListSelect = document.getElementById('saveList');
+
+  function refreshSaveList(){
+    saveListSelect.innerHTML = '';
+    for(let i=0; i<localStorage.length; i++){
+      const key = localStorage.key(i);
+      if(key.startsWith('miniCitySave_')){
+        const opt = document.createElement('option');
+        opt.value = key;
+        opt.textContent = key.replace('miniCitySave_','');
+        saveListSelect.appendChild(opt);
+      }
+    }
+  }
+  refreshSaveList();
+
+  saveBtn.addEventListener('click', ()=>{
+    const name = saveNameInput.value.trim();
+    if(!name) return alert('Please enter a save name');
+    const data = {
+      map: map,
+      money: money,
+      tick: tick,
+      infiniteMoney: infiniteMoney,
+      noAbandon: noAbandon
+    };
+    localStorage.setItem('miniCitySave_'+name, JSON.stringify(data));
+    alert('City saved as '+name);
+    refreshSaveList();
+  });
+
+  loadBtn.addEventListener('click', ()=>{
+    const key = saveListSelect.value;
+    if(!key) return alert('No save selected');
+    const raw = localStorage.getItem(key);
+    if(!raw) return alert('Save not found');
+    try{
+      const data = JSON.parse(raw);
+      map = data.map || map;
+      money = data.money || 1000;
+      tick = data.tick || 0;
+      infiniteMoney = data.infiniteMoney || false;
+      noAbandon = data.noAbandon || false;
+
+      infMoneyCheckbox.checked = infiniteMoney;
+      noAbandonCheckbox.checked = noAbandon;
+
+      updateStatus();
+      draw();
+      alert('City loaded from '+key.replace('miniCitySave_',''));
+    }catch(e){
+      alert('Error loading save');
+    }
+  });
+
+  delSaveBtn.addEventListener('click', ()=>{
+    const key = saveListSelect.value;
+    if(!key) return alert('No save selected');
+    if(confirm('Delete save '+key.replace('miniCitySave_','')+'?')){
+      localStorage.removeItem(key);
+      refreshSaveList();
+    }
+  });
+
+  // Map handling (simplified for now)
+  const mapSelect = document.getElementById('mapSelect');
+  const loadMapBtn = document.getElementById('loadMap');
+  const newMapBtn = document.getElementById('newMap');
+
+  const predefinedMaps = {
+    "Empty": new Array(cols*rows).fill(0),
+    "Basic Roads": (()=>{
+      let m = new Array(cols*rows).fill(0);
+      for(let x=0; x<cols; x++){
+        m[getIndex(x, Math.floor(rows/2))] = 1;
+      }
+      for(let y=0; y<rows; y++){
+        m[getIndex(Math.floor(cols/2), y)] = 1;
+      }
+      return m;
+    })()
+  };
+
+  function fillMapSelect(){
+    mapSelect.innerHTML = '';
+    for(let name in predefinedMaps){
+      const opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = name;
+      mapSelect.appendChild(opt);
+    }
+  }
+  fillMapSelect();
+
+  loadMapBtn.addEventListener('click', ()=>{
+    const name = mapSelect.value;
+    if(!name) return;
+    map = predefinedMaps[name].slice();
+    draw();
+    updateStatus();
+  });
+
+  newMapBtn.addEventListener('click', ()=>{
+    map = new Array(cols*rows).fill(0);
+    draw();
+    updateStatus();
+  });
+
+  // Game speed & play/pause
+  const speedRange = document.getElementById('speed');
+  let intervalId = null;
+  function gameTick(){
+    if(playing){
+      for(let i=0; i<speed; i++) update();
+      draw();
+      updateStatus();
+    }
+  }
+
+  function startGameLoop(){
+    if(intervalId) clearInterval(intervalId);
+    intervalId = setInterval(gameTick, 1000);
+  }
+
+  speedRange.addEventListener('input', e=>{
+    speed = +e.target.value;
+  });
+
+  const playPauseBtn = document.getElementById('playPause');
+  playPauseBtn.addEventListener('click', ()=>{
+    playing = !playing;
+    playPauseBtn.textContent = playing ? 'Pause' : 'Play';
+  });
+
+  const stepBtn = document.getElementById('step');
+  stepBtn.addEventListener('click', ()=>{
+    if(!playing){
+      update();
+      draw();
+      updateStatus();
+    }
+  });
+
+  const resetBtn = document.getElementById('reset');
+  resetBtn.addEventListener('click', ()=>{
+    if(confirm('Reset city?')){
+      map = new Array(cols*rows).fill(0);
+      money = 1000;
+      population = 0;
+      tick = 0;
+      playing = false;
+      playPauseBtn.textContent = 'Play';
+      updateStatus();
+      draw();
+    }
+  });
+
+  // Natural disasters (for fun)
+  function meteorStrike(){
+    for(let i=0; i<10; i++){
+      const x = Math.floor(Math.random()*cols);
+      const y = Math.floor(Math.random()*rows);
+      map[getIndex(x,y)] = 0; // meteor destroys tile
+    }
+    alert('Meteor strike! Some tiles destroyed.');
+  }
+  document.getElementById('triggerMeteor').addEventListener('click', meteorStrike);
+
+  function earthquake(){
+    // randomly clear some tiles in clusters
+    for(let i=0; i<5; i++){
+      const x = Math.floor(Math.random()*cols);
+      const y = Math.floor(Math.random()*rows);
+      for(let dx=-1; dx<=1; dx++){
+        for(let dy=-1; dy<=1; dy++){
+          const nx = x+dx, ny = y+dy;
+          if(nx>=0 && nx<cols && ny>=0 && ny<rows){
+            if(Math.random()<0.3) map[getIndex(nx,ny)] = 0;
+          }
+        }
+      }
+    }
+    alert('Earthquake! Buildings damaged.');
+  }
+  document.getElementById('triggerQuake').addEventListener('click', earthquake);
+
+  function flood(){
+    // flood clears some low tiles, here randomly clears road and residential
+    for(let i=0; i<map.length; i++){
+      if(map[i]===1 || map[i]===2){
+        if(Math.random()<0.1) map[i] = 0;
+      }
+    }
+    alert('Flood! Roads and houses affected.');
+  }
+  document.getElementById('triggerFlood').addEventListener('click', flood);
+
+  // Initial draw and update
+  draw();
+  updateStatus();
+  startGameLoop();
+})();
+</script>
+</body>
+</html>
